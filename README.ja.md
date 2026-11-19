@@ -6,7 +6,7 @@ JSONストリーム向けのパーサです。JSON を届いたぶんだけ少�
 
 ```ts
 import { z } from "zod";
-import { SchemaPartialJsonParser } from "jsontide";
+import { SchemaPartialJsonParser } from "@tangentmochi/jsontide";
 
 const User = z.object({ name: z.string(), tags: z.array(z.string()) });
 const parser = new SchemaPartialJsonParser(User.partial());
@@ -25,7 +25,7 @@ parser.end();                       // { name: "jonson", tags: ["a", "b"] }
 ## インストール
 
 ```sh
-npm install jsontide
+npm install @tangentmochi/jsontide
 ```
 
 スキーマ検証を使う場合は、Standard Schema 対応のライブラリも入れてください。
@@ -39,7 +39,7 @@ npm install zod
 ### チャンクを順に渡す
 
 ```ts
-import { PartialJsonParser } from "jsontide";
+import { PartialJsonParser } from "@tangentmochi/jsontide";
 
 const parser = new PartialJsonParser();
 
@@ -69,7 +69,7 @@ const result = parser.end();
 `parseJsonStream` は上のループを代わりに実行します。`AsyncIterable<string>` と `ReadableStream<string>` を受け取ります。チャンクごとにその時点の値を返し、最後に完成した値を返します。
 
 ```ts
-import { parseJsonStream } from "jsontide";
+import { parseJsonStream } from "@tangentmochi/jsontide";
 
 const res = await fetch(url);
 for await (const value of parseJsonStream(res.body!.pipeThrough(new TextDecoderStream()))) {
@@ -90,7 +90,7 @@ for await (const result of parseJsonStream(source, User.partial())) {
 ### 文字列を 1 回だけパースする
 
 ```ts
-import { parsePartialJson } from "jsontide";
+import { parsePartialJson } from "@tangentmochi/jsontide";
 
 parsePartialJson('{"a": [1, 2, tr'); // { a: [1, 2, true] }
 ```
@@ -101,7 +101,7 @@ parsePartialJson('{"a": [1, 2, tr'); // { a: [1, 2, true] }
 
 ```ts
 import { z } from "zod";
-import { SchemaPartialJsonParser } from "jsontide";
+import { SchemaPartialJsonParser } from "@tangentmochi/jsontide";
 
 const User = z.object({ name: z.string(), tags: z.array(z.string()) });
 
@@ -134,7 +134,7 @@ type SchemaResult<T> =
 完成した値を一度だけ検証するなら `validate` を使います。こちらは非同期スキーマにも対応します。
 
 ```ts
-import { validate } from "jsontide";
+import { validate } from "@tangentmochi/jsontide";
 
 const user = await validate(User, JSON.parse(text)); // 合わなければ SchemaValidationError
 ```

@@ -6,7 +6,7 @@ A type-safe streaming JSON parser. jsontide parses JSON incrementally as it arri
 
 ```ts
 import { z } from "zod";
-import { SchemaPartialJsonParser } from "jsontide";
+import { SchemaPartialJsonParser } from "@tangentmochi/jsontide";
 
 const User = z.object({ name: z.string(), tags: z.array(z.string()) });
 const parser = new SchemaPartialJsonParser(User.partial());
@@ -25,7 +25,7 @@ parser.end();                       // { name: "jonson", tags: ["a", "b"] }
 ## Installation
 
 ```sh
-npm install jsontide
+npm install @tangentmochi/jsontide
 ```
 
 To validate with a schema, also install a Standard Schema library:
@@ -39,7 +39,7 @@ npm install zod
 ### Push chunks one at a time
 
 ```ts
-import { PartialJsonParser } from "jsontide";
+import { PartialJsonParser } from "@tangentmochi/jsontide";
 
 const parser = new PartialJsonParser();
 
@@ -69,7 +69,7 @@ const result = parser.end();
 `parseJsonStream` runs the loop above for you. It accepts an `AsyncIterable<string>` or a `ReadableStream<string>`. It yields the value received so far after each chunk, and it yields the complete value last.
 
 ```ts
-import { parseJsonStream } from "jsontide";
+import { parseJsonStream } from "@tangentmochi/jsontide";
 
 const res = await fetch(url);
 for await (const value of parseJsonStream(res.body!.pipeThrough(new TextDecoderStream()))) {
@@ -90,7 +90,7 @@ If the stream ends before the document is complete, the loop throws a `SyntaxErr
 ### Parse a string once
 
 ```ts
-import { parsePartialJson } from "jsontide";
+import { parsePartialJson } from "@tangentmochi/jsontide";
 
 parsePartialJson('{"a": [1, 2, tr'); // { a: [1, 2, true] }
 ```
@@ -101,7 +101,7 @@ parsePartialJson('{"a": [1, 2, tr'); // { a: [1, 2, true] }
 
 ```ts
 import { z } from "zod";
-import { SchemaPartialJsonParser } from "jsontide";
+import { SchemaPartialJsonParser } from "@tangentmochi/jsontide";
 
 const User = z.object({ name: z.string(), tags: z.array(z.string()) });
 
@@ -134,7 +134,7 @@ type SchemaResult<T> =
 To validate a complete value once, use `validate`. It also supports async schemas.
 
 ```ts
-import { validate } from "jsontide";
+import { validate } from "@tangentmochi/jsontide";
 
 const user = await validate(User, JSON.parse(text)); // throws SchemaValidationError on mismatch
 ```
