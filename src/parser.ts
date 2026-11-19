@@ -38,7 +38,7 @@ type Container =
 
 // escape: null outside an escape, "" right after a backslash, "u" plus the hex digits read so far inside \uXXXX.
 type Token =
-  | { kind: "string"; isKey: boolean; text: string; escape: string | null }
+  | { kind: "string"; isKey: boolean; text: string; escape: string | null; pendingHighSurrogate: string }
   | { kind: "number"; text: string }
   | { kind: "literal"; word: "true" | "false" | "null"; matched: number };
 
@@ -113,7 +113,7 @@ export class PartialJsonParser {
         j++;
       }
       if (j > i) {
-        token.text += chunk.slice(i, j);
+        appendText(token, chunk.slice(i, j));
         this.pos += j - i;
         return j;
       }
@@ -130,14 +130,14 @@ export class PartialJsonParser {
       } else {
         const decoded = ESCAPES[ch];
         if (decoded === undefined) throw this.fail(`Bad escaped character ${JSON.stringify(ch)}`);
-        token.text += decoded;
+        appendText(token, decoded);
         token.escape = null;
       }
     } else {
       if (!HEX.test(ch)) throw this.fail(`Bad Unicode escape ${JSON.stringify(ch)}`);
       token.escape += ch;
       if (token.escape.length === 5) {
-        token.text += String.fromCharCode(parseInt(token.escape.slice(1), 16));
+        appendText(token, String.fromCharCode(parseInt(token.escape.slice(1), 16)));
         token.escape = null;
       }
     }
@@ -170,7 +170,7 @@ export class PartialJsonParser {
     switch (top.state) {
       case "keyOrEnd":
       case "key":
-        if (ch === '"') this.token = { kind: "string", isKey: true, text: "", escape: null };
+        if (ch === '"') this.token = { kind: "string", isKey: true, text: "", escape: null, pendingHighSurrogate: "" };
         else if (ch === "}" && top.state === "keyOrEnd") this.stack.pop();
         else throw this.unexpected(ch);
         return;
@@ -204,7 +204,7 @@ export class PartialJsonParser {
       }
       case '"':
         this.place("");
-        this.token = { kind: "string", isKey: false, text: "", escape: null };
+        this.token = { kind: "string", isKey: false, text: "", escape: null, pendingHighSurrogate: "" };
         return;
       case "t":
         return this.startLiteral("true", true);
@@ -226,9 +226,10 @@ export class PartialJsonParser {
 
   private finishString(token: Token & { kind: "string" }): void {
     this.token = null;
-    if (!token.isKey) return this.write(token.text, false);
+    const text = token.text + token.pendingHighSurrogate;
+    if (!token.isKey) return this.write(text, false);
     const top = this.stack.at(-1) as Container & { kind: "object" };
-    top.key = token.text;
+    top.key = text;
     top.state = "colon";
   }
 
@@ -243,7 +244,7 @@ export class PartialJsonParser {
     if (token?.kind === "number" && !NUMBER_PREFIX.test(token.text)) {
       throw this.fail(`Invalid number ${JSON.stringify(token.text)}`);
     }
-    if (token?.kind === "string" && !token.isKey) this.write(withoutTrailingHighSurrogate(token.text), false);
+    if (token?.kind === "string" && !token.isKey) this.write(token.text, false);
   }
 
   private place(value: JsonValue): void {
@@ -280,10 +281,15 @@ export class PartialJsonParser {
   }
 }
 
-// Hide a high surrogate until its low half arrives, so a snapshot never ends in half a code point.
-function withoutTrailingHighSurrogate(text: string): string {
-  const last = text.charCodeAt(text.length - 1);
-  return last >= 0xd800 && last <= 0xdbff ? text.slice(0, -1) : text;
+function appendText(token: Token & { kind: "string" }, piece: string): void {
+  const last = piece.charCodeAt(piece.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) {
+    token.text += token.pendingHighSurrogate + piece.slice(0, -1);
+    token.pendingHighSurrogate = piece.slice(-1);
+  } else {
+    token.text += token.pendingHighSurrogate + piece;
+    token.pendingHighSurrogate = "";
+  }
 }
 
 export function parsePartialJson(text: string): JsonValue | undefined {
