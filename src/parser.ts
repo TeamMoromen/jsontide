@@ -30,7 +30,7 @@ export async function validate<S extends StandardSchemaV1>(
 
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
-type JsonObject = { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
 
 type Container =
   | { kind: "object"; value: JsonObject; state: "keyOrEnd" | "key" | "colon" | "value" | "commaOrEnd"; key: string }
