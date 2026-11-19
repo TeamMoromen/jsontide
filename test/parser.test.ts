@@ -163,6 +163,33 @@ test("end throws SyntaxError for an incomplete document", () => {
   assert.throws(() => parser.end(), SyntaxError);
 });
 
+test("push and end validate only when the parsed value changed", () => {
+  let calls = 0;
+  const counting = z.unknown().refine(() => (calls++, true));
+  const parser = new SchemaPartialJsonParser(counting);
+
+  parser.push('{"a": "x');
+  assert.equal(calls, 1);
+  for (const chunk of ['"', " ", ', "b"', ":", " 1", "2"]) parser.push(chunk);
+  assert.equal(calls, 1);
+  parser.push("}");
+  assert.equal(calls, 2);
+  parser.end();
+  assert.equal(calls, 2);
+});
+
+test("version increases only when the value changes", () => {
+  const parser = new PartialJsonParser();
+  parser.push('["a"');
+  const v = parser.version;
+  parser.push(" ");
+  parser.push("");
+  parser.push(", 1");
+  assert.equal(parser.version, v);
+  parser.push("]");
+  assert.ok(parser.version > v);
+});
+
 test("an async schema throws a TypeError", () => {
   const parser = new SchemaPartialJsonParser(z.string().refine(async () => true));
   assert.throws(() => parser.push('"a"'), TypeError);

@@ -53,6 +53,12 @@ export class PartialJsonParser {
   private root: JsonValue | undefined = undefined;
   private rootDone = false;
   private error: SyntaxError | null = null;
+  private changes = 0;
+
+  /** Increases whenever the value returned by `push` changes, so callers can skip work on unchanged snapshots. */
+  get version(): number {
+    return this.changes;
+  }
 
   push(chunk: string): JsonValue | undefined {
     if (this.error) throw this.error;
@@ -262,14 +268,18 @@ export class PartialJsonParser {
   private write(value: JsonValue, fresh: boolean): void {
     const top = this.stack.at(-1);
     if (!top) {
+      if (this.root === value) return;
       this.root = value;
     } else if (top.kind === "array") {
       if (fresh) top.value.push(value);
+      else if (top.value.at(-1) === value) return;
       else top.value[top.value.length - 1] = value;
     } else {
+      if (!fresh && top.value[top.key] === value) return;
       // defineProperty keeps "__proto__" an own property, as JSON.parse does.
       Object.defineProperty(top.value, top.key, { value, writable: true, enumerable: true, configurable: true });
     }
+    this.changes++;
   }
 
   private unexpected(ch: string): SyntaxError {
@@ -302,11 +312,13 @@ export type SchemaResult<T> =
 
 /**
  * Wraps a PartialJsonParser and checks each snapshot against a Standard Schema.
+ * Validation runs only when the snapshot changed; otherwise the previous result object is returned again.
  * The schema must validate synchronously; an async schema throws a TypeError.
  */
 export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
   readonly schema: S;
   private readonly parser = new PartialJsonParser();
+  private last: { version: number; result: SchemaResult<StandardSchemaV1.InferOutput<S>> } | null = null;
 
   constructor(schema: S) {
     this.schema = schema;
@@ -314,15 +326,13 @@ export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
 
   /** Parses the chunk and reports whether the value received so far satisfies the schema. */
   push(chunk: string): SchemaResult<StandardSchemaV1.InferOutput<S>> {
-    const value = this.parser.push(chunk);
-    const result = this.validateSync(value);
-    return result.issues ? { success: false, value, issues: result.issues } : { success: true, value: result.value };
+    return this.check(this.parser.push(chunk));
   }
 
   /** Signals end of input and returns the schema's output; throws SchemaValidationError if the document does not match. */
   end(): StandardSchemaV1.InferOutput<S> {
-    const result = this.validateSync(this.parser.end());
-    if (result.issues) throw new SchemaValidationError(result.issues);
+    const result = this.check(this.parser.end());
+    if (!result.success) throw new SchemaValidationError(result.issues);
     return result.value;
   }
 
@@ -330,9 +340,15 @@ export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
     return this.parser.isError();
   }
 
-  private validateSync(value: unknown): StandardSchemaV1.Result<StandardSchemaV1.InferOutput<S>> {
-    const result = this.schema["~standard"].validate(value);
-    if (result instanceof Promise) throw new TypeError("SchemaPartialJsonParser requires a synchronous schema");
+  private check(value: JsonValue | undefined): SchemaResult<StandardSchemaV1.InferOutput<S>> {
+    const version = this.parser.version;
+    if (this.last?.version === version) return this.last.result;
+    const output = this.schema["~standard"].validate(value);
+    if (output instanceof Promise) throw new TypeError("SchemaPartialJsonParser requires a synchronous schema");
+    const result: SchemaResult<StandardSchemaV1.InferOutput<S>> = output.issues
+      ? { success: false, value, issues: output.issues }
+      : { success: true, value: output.value };
+    this.last = { version, result };
     return result;
   }
 }
