@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
+/** A source of JSON text chunks accepted by {@link parseJsonStream}. Chunks may split the text at any character. */
 export type JsonSource = AsyncIterable<string> | ReadableStream<string>;
 
 const WHITESPACE = new Set([" ", "\t", "\n", "\r"]);
@@ -9,9 +10,12 @@ const HEX = /[\da-fA-F]/;
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 const NUMBER_PREFIX = /^-?(?:(?:0|[1-9]\d*)(?:\.\d*|(?:\.\d+)?[eE][+-]?\d*)?)?$/;
 
+/** Thrown when a value does not satisfy a Standard Schema. The message joins the issue messages with "; ". */
 export class SchemaValidationError extends Error {
+  /** The issues reported by the schema. */
   readonly issues: readonly StandardSchemaV1.Issue[];
 
+  /** @param issues The issues reported by the schema. */
   constructor(issues: readonly StandardSchemaV1.Issue[]) {
     super(issues.map((i) => i.message).join("; "));
     this.name = "SchemaValidationError";
@@ -19,6 +23,14 @@ export class SchemaValidationError extends Error {
   }
 }
 
+/**
+ * Validates a value against a Standard Schema. Works with both synchronous and asynchronous schemas.
+ *
+ * @param schema Any Standard Schema (Zod, Valibot, ArkType, ...).
+ * @param value The value to validate.
+ * @returns The schema's output value.
+ * @throws {SchemaValidationError} If the value does not satisfy the schema.
+ */
 export async function validate<S extends StandardSchemaV1>(
   schema: S,
   value: unknown,
@@ -28,8 +40,9 @@ export async function validate<S extends StandardSchemaV1>(
   return result.value;
 }
 
-
+/** Any value that JSON can represent. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+/** A JSON object. */
 export type JsonObject = { [key: string]: JsonValue };
 
 type Container =
@@ -60,6 +73,16 @@ export class PartialJsonParser {
     return this.changes;
   }
 
+  /**
+   * Feeds the next chunk of JSON text.
+   *
+   * Partial strings appear as their text so far. A number appears only once a character after it arrives,
+   * because "12" may still become "123".
+   *
+   * @param chunk The next piece of JSON text. It may split the text anywhere, even inside a string escape.
+   * @returns The value received so far, or `undefined` if no value has started yet.
+   * @throws {SyntaxError} If the input so far is not a valid JSON prefix. Every later call throws the same error.
+   */
   push(chunk: string): JsonValue | undefined {
     if (this.error) throw this.error;
     try {
@@ -73,7 +96,12 @@ export class PartialJsonParser {
     }
   }
 
-  /** Signals end of input: finishes a trailing top-level number and throws if the document is incomplete. */
+  /**
+   * Signals end of input: finishes a trailing top-level number and throws if the document is incomplete.
+   *
+   * @returns The complete value.
+   * @throws {SyntaxError} If the document is incomplete or an earlier `push` failed.
+   */
   end(): JsonValue {
     if (this.error) throw this.error;
     try {
@@ -86,6 +114,7 @@ export class PartialJsonParser {
     }
   }
 
+  /** Returns `true` once a `SyntaxError` has been thrown. After that, `push` and `end` throw the same error. */
   isError(): boolean {
     return this.error !== null;
   }
@@ -302,10 +331,25 @@ function appendText(token: Token & { kind: "string" }, piece: string): void {
   }
 }
 
+/**
+ * Parses a possibly incomplete JSON text in one call. Same as a single {@link PartialJsonParser.push}.
+ *
+ * @example
+ * parsePartialJson('{"a":[1,"x'); // { a: [1, "x"] }
+ *
+ * @param text A JSON text or a prefix of one.
+ * @returns The value received so far, or `undefined` if no value has started yet. A trailing top-level number
+ *   is not returned, because it may be incomplete.
+ * @throws {SyntaxError} If the text is not a valid JSON prefix.
+ */
 export function parsePartialJson(text: string): JsonValue | undefined {
   return new PartialJsonParser().push(text);
 }
 
+/**
+ * The result of checking a snapshot against a schema.
+ * On success, `value` is the schema's output. On failure, `value` is the raw snapshot and `issues` says why it failed.
+ */
 export type SchemaResult<T> =
   | { success: true; value: T }
   | { success: false; value: JsonValue | undefined; issues: readonly StandardSchemaV1.Issue[] };
@@ -316,26 +360,41 @@ export type SchemaResult<T> =
  * The schema must validate synchronously; an async schema throws a TypeError.
  */
 export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
+  /** The schema that each snapshot is checked against. */
   readonly schema: S;
   private readonly parser = new PartialJsonParser();
   private last: { version: number; result: SchemaResult<StandardSchemaV1.InferOutput<S>> } | null = null;
 
+  /** @param schema A Standard Schema that validates synchronously. */
   constructor(schema: S) {
     this.schema = schema;
   }
 
-  /** Parses the chunk and reports whether the value received so far satisfies the schema. */
+  /**
+   * Parses the chunk and reports whether the value received so far satisfies the schema.
+   *
+   * @param chunk The next piece of JSON text.
+   * @throws {SyntaxError} If the input so far is not a valid JSON prefix.
+   * @throws {TypeError} If the schema validates asynchronously.
+   */
   push(chunk: string): SchemaResult<StandardSchemaV1.InferOutput<S>> {
     return this.check(this.parser.push(chunk));
   }
 
-  /** Signals end of input and returns the schema's output; throws SchemaValidationError if the document does not match. */
+  /**
+   * Signals end of input and returns the schema's output.
+   *
+   * @throws {SyntaxError} If the document is incomplete or invalid.
+   * @throws {SchemaValidationError} If the complete document does not satisfy the schema.
+   * @throws {TypeError} If the schema validates asynchronously.
+   */
   end(): StandardSchemaV1.InferOutput<S> {
     const result = this.check(this.parser.end());
     if (!result.success) throw new SchemaValidationError(result.issues);
     return result.value;
   }
 
+  /** Returns `true` once the underlying parser has thrown a `SyntaxError`. */
   isError(): boolean {
     return this.parser.isError();
   }
@@ -357,8 +416,27 @@ export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
  * Parses a stream of JSON text chunks. Yields the value received so far after each chunk, then yields the
  * complete value from `end()` last. With a schema, yields a SchemaResult instead and finishes with the schema's output.
  * Breaking out of the loop early cancels the source.
+ *
+ * @example
+ * for await (const partial of parseJsonStream(response.body.pipeThrough(new TextDecoderStream()))) {
+ *   render(partial);
+ * }
+ *
+ * @param source The JSON text chunks.
+ * @throws {SyntaxError} If the stream is not valid JSON or ends before the document is complete.
  */
 export function parseJsonStream(source: JsonSource): AsyncGenerator<JsonValue | undefined, void>;
+/**
+ * Parses a stream of JSON text chunks and checks each snapshot against a schema.
+ * Yields a {@link SchemaResult} after each chunk, then a successful result holding the schema's output last.
+ * Breaking out of the loop early cancels the source.
+ *
+ * @param source The JSON text chunks.
+ * @param schema A Standard Schema that validates synchronously.
+ * @throws {SyntaxError} If the stream is not valid JSON or ends before the document is complete.
+ * @throws {SchemaValidationError} If the complete document does not satisfy the schema.
+ * @throws {TypeError} If the schema validates asynchronously.
+ */
 export function parseJsonStream<S extends StandardSchemaV1>(
   source: JsonSource,
   schema: S,
