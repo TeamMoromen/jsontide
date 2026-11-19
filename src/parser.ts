@@ -330,3 +330,25 @@ export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
     return result;
   }
 }
+
+/**
+ * Parses a stream of JSON text chunks. Yields the value received so far after each chunk, then yields the
+ * complete value from `end()` last. With a schema, yields a SchemaResult instead and finishes with the schema's output.
+ * Breaking out of the loop early cancels the source.
+ */
+export function parseJsonStream(source: JsonSource): AsyncGenerator<JsonValue | undefined, void>;
+export function parseJsonStream<S extends StandardSchemaV1>(
+  source: JsonSource,
+  schema: S,
+): AsyncGenerator<SchemaResult<StandardSchemaV1.InferOutput<S>>, void>;
+export async function* parseJsonStream(source: JsonSource, schema?: StandardSchemaV1): AsyncGenerator<unknown, void> {
+  if (schema === undefined) {
+    const parser = new PartialJsonParser();
+    for await (const chunk of source) yield parser.push(chunk);
+    yield parser.end();
+  } else {
+    const parser = new SchemaPartialJsonParser(schema);
+    for await (const chunk of source) yield parser.push(chunk);
+    yield { success: true, value: parser.end() };
+  }
+}
