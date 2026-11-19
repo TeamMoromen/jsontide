@@ -5,16 +5,21 @@ English | [日本語](README.ja.md)
 A type-safe streaming JSON parser. jsontide parses JSON incrementally as it arrives and returns the value received so far. You can validate that value with any [Standard Schema](https://standardschema.dev) library, such as Zod, Valibot, or ArkType.
 
 ```ts
-const parser = new PartialJsonParser();
-parser.push('{"name": "jo');               // { name: "jo" }
-parser.push('nson", "tags": ["a');         // { name: "jonson", tags: ["a"] }
-parser.push('", "b"]}');                   // { name: "jonson", tags: ["a", "b"] }
-parser.end();                              // { name: "jonson", tags: ["a", "b"] }
+import { z } from "zod";
+import { SchemaPartialJsonParser } from "jsontide";
+
+const User = z.object({ name: z.string(), tags: z.array(z.string()) });
+const parser = new SchemaPartialJsonParser(User.partial());
+
+parser.push('{"name": "jo');        // { success: true, value: { name: "jo" } }
+parser.push('nson", "tags": ["a');  // { success: true, value: { name: "jonson", tags: ["a"] } }
+parser.push('", "b"]}');            // { success: true, value: { name: "jonson", tags: ["a", "b"] } }
+parser.end();                       // { name: "jonson", tags: ["a", "b"] }
 ```
 
 ## Requirements
 
-- Node.js 18 or later
+- Node.js 20.19 or later
 - ESM only
 
 ## Installation
@@ -181,7 +186,7 @@ A `"__proto__"` key becomes an own property, as with `JSON.parse`. It does not c
 | `parsePartialJson(text)` | Parses a string once and returns the partial value |
 | `validate(schema, value)` | Validates a value against a schema and returns a `Promise` of the output |
 | `SchemaValidationError` | An error with `issues: readonly StandardSchemaV1.Issue[]` |
-| `JsonValue` / `SchemaResult<T>` / `JsonSource` | Types |
+| `JsonValue` / `JsonObject` / `SchemaResult<T>` / `JsonSource` | Types |
 
 ## Development
 
