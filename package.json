@@ -2,7 +2,31 @@
   "name": "jsontide",
   "version": "0.1.0",
   "description": "Type-safe streaming JSON parser: parse JSON incrementally from AsyncIterable or ReadableStream and validate it with any Standard Schema (Zod, Valibot, ArkType)",
+  "author": {
+    "name": "TangentMochi"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TeamMoromen/jsontide.git"
+  },
+  "keywords": [
+    "json",
+    "streaming",
+    "partial-json",
+    "incremental",
+    "parser",
+    "standard-schema",
+    "zod",
+    "valibot",
+    "arktype",
+    "llm"
+  ],
+  "bugs": {
+    "url": "https://github.com/TeamMoromen/jsontide/issues"
+  },
+  "homepage": "https://github.com/TeamMoromen/jsontide#readme",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,6 +36,7 @@
     }
   },
   "scripts": {
+    "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",
@@ -27,9 +52,11 @@
     "zod": "^4.6.7"
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
   ],
   "engines": {
-    "node": ">=22.18"
+    "node": ">=18"
   }
 }
