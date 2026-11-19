@@ -14,8 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc",
-    "test": "node --test \"src/**/*.test.ts\"",
-    "emit": "node src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "license": "MIT",

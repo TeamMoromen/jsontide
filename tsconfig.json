@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test/emitter.test.ts", "test/emitter.ts", "test/cli.ts"]
+  "include": ["src", "test/**/*.ts"]
 }

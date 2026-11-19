@@ -8,7 +8,7 @@ import {
   SchemaValidationError,
   validate,
   type JsonValue,
-} from "./index.ts";
+} from "../src/index.ts";
 
 const schema = z.object({ name: z.string(), tags: z.array(z.string()) });
 
@@ -46,6 +46,10 @@ test("parsePartialJson returns the part of the value received so far", () => {
     ['"\\ud83c', ""],
     ['"\\ud83c\\udf63', "🍣"],
     ['"\ud83c', ""],
+    ['"\\ud83c\udf63', "🍣"],
+    ['"\\ud83c"', "\ud83c"],
+    ['"\\ud83c\\n', "\ud83c\n"],
+    ['{"\\ud83c": 1}', { "\ud83c": 1 }],
     ["12", undefined],
     ["12 ", 12],
     ["nul", null],
