@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { parsePartialJson, PartialJsonParser, SchemaValidationError, validate, type JsonValue } from "./index.ts";
+import {
+  parsePartialJson,
+  PartialJsonParser,
+  SchemaPartialJsonParser,
+  SchemaValidationError,
+  validate,
+  type JsonValue,
+} from "./index.ts";
 
 const schema = z.object({ name: z.string(), tags: z.array(z.string()) });
 
@@ -109,6 +116,52 @@ test("a failed parser keeps throwing", () => {
   const parser = new PartialJsonParser();
   assert.throws(() => parser.push("[1,]"), SyntaxError);
   assert.throws(() => parser.push("2]"), SyntaxError);
+});
+
+test("push reports issues for a partial value and returns the typed value once it matches", () => {
+  const parser = new SchemaPartialJsonParser(schema);
+
+  const partial = parser.push('{"name": "jo');
+  assert.equal(partial.success, false);
+  assert.deepEqual(partial.value, { name: "jo" });
+  if (!partial.success) assert.ok(partial.issues.length > 0);
+
+  const done = parser.push('nson", "tags": ["a"]}');
+  assert.ok(done.success);
+  const name: string = done.value.name;
+  assert.equal(name, "jonson");
+  assert.deepEqual(done.value.tags, ["a"]);
+});
+
+test("push accepts a partial value when the schema allows it", () => {
+  const parser = new SchemaPartialJsonParser(schema.partial());
+  const result = parser.push('{"name": "jo');
+  assert.ok(result.success);
+  assert.equal(result.value.name, "jo");
+});
+
+test("end returns the schema's output", () => {
+  const parser = new SchemaPartialJsonParser(z.object({ n: z.number().transform(String) }));
+  parser.push('{"n": 12}');
+  const n: string = parser.end().n;
+  assert.equal(n, "12");
+});
+
+test("end throws SchemaValidationError for a complete document that does not match", () => {
+  const parser = new SchemaPartialJsonParser(schema);
+  parser.push('{"name": 1, "tags": []}');
+  assert.throws(() => parser.end(), SchemaValidationError);
+});
+
+test("end throws SyntaxError for an incomplete document", () => {
+  const parser = new SchemaPartialJsonParser(schema);
+  parser.push('{"name": "jonson"');
+  assert.throws(() => parser.end(), SyntaxError);
+});
+
+test("an async schema throws a TypeError", () => {
+  const parser = new SchemaPartialJsonParser(z.string().refine(async () => true));
+  assert.throws(() => parser.push('"a"'), TypeError);
 });
 
 // A partial value may be shorter than the final one but never disagrees with it.

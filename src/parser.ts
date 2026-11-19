@@ -289,3 +289,44 @@ function withoutTrailingHighSurrogate(text: string): string {
 export function parsePartialJson(text: string): JsonValue | undefined {
   return new PartialJsonParser().push(text);
 }
+
+export type SchemaResult<T> =
+  | { success: true; value: T }
+  | { success: false; value: JsonValue | undefined; issues: readonly StandardSchemaV1.Issue[] };
+
+/**
+ * Wraps a PartialJsonParser and checks each snapshot against a Standard Schema.
+ * The schema must validate synchronously; an async schema throws a TypeError.
+ */
+export class SchemaPartialJsonParser<S extends StandardSchemaV1> {
+  readonly schema: S;
+  private readonly parser = new PartialJsonParser();
+
+  constructor(schema: S) {
+    this.schema = schema;
+  }
+
+  /** Parses the chunk and reports whether the value received so far satisfies the schema. */
+  push(chunk: string): SchemaResult<StandardSchemaV1.InferOutput<S>> {
+    const value = this.parser.push(chunk);
+    const result = this.validateSync(value);
+    return result.issues ? { success: false, value, issues: result.issues } : { success: true, value: result.value };
+  }
+
+  /** Signals end of input and returns the schema's output; throws SchemaValidationError if the document does not match. */
+  end(): StandardSchemaV1.InferOutput<S> {
+    const result = this.validateSync(this.parser.end());
+    if (result.issues) throw new SchemaValidationError(result.issues);
+    return result.value;
+  }
+
+  isError(): boolean {
+    return this.parser.isError();
+  }
+
+  private validateSync(value: unknown): StandardSchemaV1.Result<StandardSchemaV1.InferOutput<S>> {
+    const result = this.schema["~standard"].validate(value);
+    if (result instanceof Promise) throw new TypeError("SchemaPartialJsonParser requires a synchronous schema");
+    return result;
+  }
+}
